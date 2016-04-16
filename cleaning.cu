@@ -45,15 +45,15 @@ int main(int argc, char *argv[]) {
     LPVOID detectorMapView = MapViewOfFile(detectorMap, FILE_MAP_READ, 0, 0, 0);
     assert(detectorMapView != NULL);
     
-    int detectorSize = GetFileSize(detectorFile, NULL);
+    unsigned int detectorSize = GetFileSize(detectorFile, NULL);
     char *detectorMapViewChar = (char *)detectorMapView;
     thrust::device_vector<char> detectorCopy(detectorSize);
     thrust::copy(detectorMapViewChar, detectorMapViewChar+detectorSize, detectorCopy.begin());
     cout << "Lane detector inventory loaded onto gpu: " << ((clock() - start)/(double)CLOCKS_PER_SEC) << '\n';
     
     int detector_linecnt = thrust::count(detectorCopy.begin(), detectorCopy.end(), '\n');
-    thrust::device_vector<int> detector_linebreaks(detector_linecnt);
-    thrust::counting_iterator<int> begin(0);
+    thrust::device_vector<unsigned int> detector_linebreaks(detector_linecnt);
+    thrust::counting_iterator<unsigned int> begin(0);
     thrust::copy_if(begin, begin + detectorSize, detectorCopy.begin(), detector_linebreaks.begin(), line_break());
     
     thrust::device_vector<int> detector_num_columns(1);
@@ -70,7 +70,7 @@ int main(int argc, char *argv[]) {
     thrust::device_vector<char *> detector_columns(2);
     detector_columns[0] = thrust::raw_pointer_cast(detector_laneid.data());
     detector_columns[1] = thrust::raw_pointer_cast(detector_zoneid.data());
-    column_split detector_split((char *)thrust::raw_pointer_cast(detectorCopy.data()), (int *)thrust::raw_pointer_cast(detector_linebreaks.data()), (char **)thrust::raw_pointer_cast(detector_columns.data()), (int *)thrust::raw_pointer_cast(detector_width.data()), (int *)thrust::raw_pointer_cast(detector_num_columns.data()));
+    column_split detector_split((char *)thrust::raw_pointer_cast(detectorCopy.data()), (unsigned int *)thrust::raw_pointer_cast(detector_linebreaks.data()), (char **)thrust::raw_pointer_cast(detector_columns.data()), (int *)thrust::raw_pointer_cast(detector_width.data()), (int *)thrust::raw_pointer_cast(detector_num_columns.data()));
     thrust::for_each(begin, begin + detector_linecnt, detector_split);
     
     thrust::device_vector<int> unique_laneid(detector_linecnt);
@@ -94,7 +94,7 @@ int main(int argc, char *argv[]) {
     assert(fileMapView != NULL);
 
     //Copy file to GPU
-    long fileSize = GetFileSize(file, NULL);
+    unsigned int fileSize = GetFileSize(file, NULL);
     char *fileMapViewChar = (char *)fileMapView;
     thrust::device_vector<char> fileCopy(fileSize);
     thrust::copy(fileMapViewChar, fileMapViewChar+fileSize, fileCopy.begin());
@@ -103,7 +103,7 @@ int main(int argc, char *argv[]) {
     
     //Measure linebreaks, store their location in device vector
     int linecnt = thrust::count(fileCopy.begin(), fileCopy.end(), '\n');
-    thrust::device_vector<int> linebreaks(linecnt);
+    thrust::device_vector<unsigned int> linebreaks(linecnt);
     thrust::copy_if(begin, begin + fileSize, fileCopy.begin(), linebreaks.begin(), line_break());
     
     //Store column widths in device vector
@@ -141,7 +141,7 @@ int main(int argc, char *argv[]) {
     columns[5] = thrust::raw_pointer_cast(quality_text.data());
     
     //Split the text into 6 columns
-    column_split splitter((char *)thrust::raw_pointer_cast(fileCopy.data()), (int *)thrust::raw_pointer_cast(linebreaks.data()), (char **)thrust::raw_pointer_cast(columns.data()), (int *)thrust::raw_pointer_cast(column_width.data()), (int *)thrust::raw_pointer_cast(num_columns.data()));
+    column_split splitter((char *)thrust::raw_pointer_cast(fileCopy.data()), (unsigned int *)thrust::raw_pointer_cast(linebreaks.data()), (char **)thrust::raw_pointer_cast(columns.data()), (int *)thrust::raw_pointer_cast(column_width.data()), (int *)thrust::raw_pointer_cast(num_columns.data()));
     thrust::for_each(begin, begin + linecnt, splitter);
     
     //We need to convert each vector to the appropriate type
@@ -181,15 +181,7 @@ int main(int argc, char *argv[]) {
     summary_stats_data      init;
     
     init.initialize();
-    
     summary_stats_data result = thrust::transform_reduce(begin, begin + linecnt, unary_op, init, binary_op);
-    
-    /*cout << "flow: " << flow[471] << "\n";
-    cout << "valid: " << flow_valid[471] << "\n";
-    
-    cout << "N: " << result.n << "\n";
-    cout << "M2: " << result.M2 << "\n";
-    cout << "Mean: " << result.mean << "\n";*/
     cout << "Standard Deviation: " << sqrt(result.variance_n()) << "\n";
     cout << "Bounds checked, standard deviation calculated: " << ((clock() - start)/(double)CLOCKS_PER_SEC) << '\n';
 
@@ -198,10 +190,10 @@ int main(int argc, char *argv[]) {
     thrust::device_vector<int> index(linecnt);
     index_filler fill_index((int *)thrust::raw_pointer_cast(index.data()));
     thrust::for_each(begin, begin+linecnt, fill_index);
-    
+
     //Sort zoneid and index
     thrust::stable_sort_by_key(zoneid.begin(), zoneid.end(), index.begin());
-    
+
     //Clean by checking standard deviation
     thrust::device_vector<int> device_linecnt(1);
     thrust::device_vector<int> new_flow(linecnt);
@@ -230,9 +222,6 @@ int main(int argc, char *argv[]) {
     thrust::fill(new_flow_text.begin(), new_flow_text.end(), 0);
     gpu_itoa new_flow_tochar((int *)thrust::raw_pointer_cast(new_flow.data()), (char *)thrust::raw_pointer_cast(new_flow_text.data()), (int *)thrust::raw_pointer_cast(&column_width[3]));
     thrust::for_each(begin, begin + linecnt, new_flow_tochar);
-    //thrust::host_vector<char> flow_host(linecnt*column_width[3]);
-    //thrust::copy(flow_text.begin(), flow_text.end(), flow_host.begin());
-    //cout << "Laneid and flow moved to host: " << ((clock() - start)/(double)CLOCKS_PER_SEC) << '\n';
     
     //Format output on GPU
     //Output includes laneid, previous flow, new flow, and validity, separated by commas
@@ -266,16 +255,16 @@ int main(int argc, char *argv[]) {
     assert(SetCurrentDirectory("Cleaned") != 0);
     HANDLE outputFile = CreateFileA(argv[2], GENERIC_WRITE | GENERIC_READ, FILE_SHARE_WRITE, NULL, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL | FILE_FLAG_SEQUENTIAL_SCAN, NULL);
     assert(outputFile != INVALID_HANDLE_VALUE);
-    
+
     HANDLE outputMap = CreateFileMapping(outputFile, NULL, PAGE_READWRITE, 0, output_end - final_output.begin(), NULL);
     if(outputMap == NULL)
         cout << GetLastError();        
- 
+
     LPVOID outputMapView = MapViewOfFile(outputMap, FILE_MAP_WRITE, 0, 0, 0);
     
     if (outputMapView == NULL)
         cout << GetLastError();
-    
+
     char *outputMapViewChar = (char *)outputMapView;
     thrust::copy(final_output.begin(), output_end, outputMapViewChar);
 

@@ -19,19 +19,19 @@ struct white_space
 struct column_split
 {
     char *text;         //Source csv file
-    int *linebreaks;    //Location of linebreaks
+    unsigned int *linebreaks;    //Location of linebreaks
     char **columns;     //Destination vectors
     int *column_width;  //Size of each entry for each vector
     int *num_columns;   //Number of columns to split
     
-    column_split(char *_text, int *_linebreaks, char **_columns, int *_column_width, int *_num_columns):
+    column_split(char *_text, unsigned int *_linebreaks, char **_columns, int *_column_width, int *_num_columns):
     text(_text), linebreaks(_linebreaks), columns(_columns), column_width(_column_width), num_columns(_num_columns) {}
     
     template <typename IndexType>
     __host__ __device__
     void operator()(const IndexType & i) {
         int column = 0;
-        int pos = linebreaks[i];
+        unsigned int pos = linebreaks[i];
         int j = 0;
         int t;
         
@@ -326,8 +326,7 @@ struct summary_stats_data
     float variance_n() { return M2 / n; }
 };
 
-// stats_unary_op is a functor that takes in a value x and
-// returns a variace_data whose mean value is initialized to x.
+
 struct summary_stats_unary_op
 {
     int *flow;
@@ -354,10 +353,7 @@ struct summary_stats_unary_op
     }
 };
 
-// summary_stats_binary_op is a functor that accepts two summary_stats_data 
-// structs and returns a new summary_stats_data which are an
-// approximation to the summary_stats for 
-// all values that have been agregated so far
+
 struct summary_stats_binary_op 
     : public thrust::binary_function<const summary_stats_data&, 
                                      const summary_stats_data&,
