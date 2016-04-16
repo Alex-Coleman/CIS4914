@@ -21,6 +21,8 @@
 #define FLOW_WIDTH 4
 #define OCCUPANCY_WIDTH 4
 #define QUALITY_WIDTH 1
+#define LOWER_BOUND 0
+#define UPPER_BOUND 200
 
 using namespace std;
 
@@ -171,8 +173,8 @@ int main(int argc, char *argv[]) {
     thrust::device_vector<char> flow_valid(linecnt);
     thrust::fill(flow_valid.begin(), flow_valid.end(), '0');
     thrust::device_vector<int> flow_bounds(2);
-    flow_bounds[0] = 0;
-    flow_bounds[1] = 200;
+    flow_bounds[0] = LOWER_BOUND;
+    flow_bounds[1] = UPPER_BOUND;
     check_bounds check_flow((int *)thrust::raw_pointer_cast(flow.data()), (char *)thrust::raw_pointer_cast(flow_valid.data()), (int *)thrust::raw_pointer_cast(flow_bounds.data()));
     thrust::for_each(begin, begin + linecnt, check_flow);
     

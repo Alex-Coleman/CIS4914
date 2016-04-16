@@ -22,11 +22,10 @@
 #define LATITUDE_WIDTH 11
 #define LONGITUDE_WIDTH 11
 #define NUMBER_OF_BOUNDING_BOXES 300
-/*
-#define FLOW_WIDTH 4
-#define OCCUPANCY_WIDTH 4
-#define QUALITY_WIDTH 1
-*/
+#define NUMBER_OF_OUTPUT_COLUMNS 6
+#define MONTH_WIDTH 2
+#define EVENT_COUNT_WIDTH 6
+
 using namespace std;
 
 int main(int argc, char *argv[]) {
@@ -38,51 +37,6 @@ int main(int argc, char *argv[]) {
         cout << "usage: " << argv[0] << " <events_train>\n";
         return 0;
     }
-    
-    //Load Lane Detector Inventory onto GPU
-    //End result of this is integer vectors for laneids and zoneids from detector inventory
-    /*HANDLE detectorFile = CreateFileA(argv[1], GENERIC_READ, FILE_SHARE_READ, NULL, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL | FILE_FLAG_SEQUENTIAL_SCAN, NULL);
-    assert(detectorFile != INVALID_HANDLE_VALUE);
-    
-    HANDLE detectorMap = CreateFileMapping(detectorFile, NULL, PAGE_READONLY, 0, 0, NULL);
-    assert(detectorMap != INVALID_HANDLE_VALUE);
- 
-    LPVOID detectorMapView = MapViewOfFile(detectorMap, FILE_MAP_READ, 0, 0, 0);
-    assert(detectorMapView != NULL);
-    
-    int detectorSize = GetFileSize(detectorFile, NULL);
-    char *detectorMapViewChar = (char *)detectorMapView;
-    thrust::device_vector<char> detectorCopy(detectorSize);
-    thrust::copy(detectorMapViewChar, detectorMapViewChar+detectorSize, detectorCopy.begin());
-    
-    int detector_linecnt = thrust::count(detectorCopy.begin(), detectorCopy.end(), '\n');
-    thrust::device_vector<int> detector_linebreaks(detector_linecnt);
-    thrust::counting_iterator<int> begin(0);
-    thrust::copy_if(begin, begin + detectorSize, detectorCopy.begin(), detector_linebreaks.begin(), line_break());
-    
-    thrust::device_vector<int> detector_num_columns(1);
-    detector_num_columns[0] = 2;
-    thrust::device_vector<int> detector_width(detector_num_columns[0]);
-    detector_width[0] = LANEID_WIDTH;
-    detector_width[1] = ZONEID_WIDTH;
-    
-    thrust::device_vector<char> detector_laneid(detector_linecnt * detector_width[0]);
-    thrust::fill(detector_laneid.begin(), detector_laneid.end(), 0);
-    thrust::device_vector<char> detector_zoneid(detector_linecnt * detector_width[1]);
-    thrust::fill(detector_zoneid.begin(), detector_zoneid.end(), 0);
-    
-    thrust::device_vector<char *> detector_columns(2);
-    detector_columns[0] = thrust::raw_pointer_cast(detector_laneid.data());
-    detector_columns[1] = thrust::raw_pointer_cast(detector_zoneid.data());
-    column_split detector_split((char *)thrust::raw_pointer_cast(detectorCopy.data()), (int *)thrust::raw_pointer_cast(detector_linebreaks.data()), (char **)thrust::raw_pointer_cast(detector_columns.data()), (int *)thrust::raw_pointer_cast(detector_width.data()), (int *)thrust::raw_pointer_cast(detector_num_columns.data()));
-    thrust::for_each(begin, begin + detector_linecnt, detector_split);
-    
-    thrust::device_vector<int> unique_laneid(detector_linecnt);
-    gpu_atoi get_laneid((char *)thrust::raw_pointer_cast(detector_laneid.data()), (int *)thrust::raw_pointer_cast(unique_laneid.data()), (int *)thrust::raw_pointer_cast(detector_width.data()));
-    thrust::for_each(begin, begin + detector_linecnt, get_laneid);
-    thrust::device_vector<int> unique_zoneid(detector_linecnt);
-    gpu_atoi get_zoneid((char *)thrust::raw_pointer_cast(detector_zoneid.data()), (int *)thrust::raw_pointer_cast(unique_zoneid.data()), (int *)thrust::raw_pointer_cast(&detector_width[1]));
-    thrust::for_each(begin, begin + detector_linecnt, get_zoneid);*/
     
     //Now we load the actual file to be cleaned
     //Windows memory mapping
@@ -143,156 +97,108 @@ int main(int argc, char *argv[]) {
     column_split splitter((char *)thrust::raw_pointer_cast(fileCopy.data()), (int *)thrust::raw_pointer_cast(linebreaks.data()), (char **)thrust::raw_pointer_cast(columns.data()), (int *)thrust::raw_pointer_cast(column_width.data()), (int *)thrust::raw_pointer_cast(num_columns.data()), (int *)thrust::raw_pointer_cast(column_locations.data()));
     thrust::for_each(begin, begin + linecnt, splitter);
     
-    /*//Convert Latitude and Longitude to floats
+    //Convert Latitude and Longitude to floats
     thrust::device_vector<double> latitude(linecnt);
-    gpu_atof latitude_tofloat((char *)thrust::raw_pointer_cast(latitude_text.data()), (double *)thrust::raw_pointer_cast(latitude.data()), (int *)thrust::raw_pointer_cast(&column_width[5]));
+    gpu_atof latitude_tofloat((char *)thrust::raw_pointer_cast(latitude_text.data()), (double *)thrust::raw_pointer_cast(latitude.data()), (int *)thrust::raw_pointer_cast(&column_width[2]));
     thrust::for_each(begin, begin + linecnt, latitude_tofloat);  
     thrust::device_vector<double> longitude(linecnt);
-    gpu_atof longitude_tofloat((char *)thrust::raw_pointer_cast(longitude_text.data()), (double *)thrust::raw_pointer_cast(longitude.data()), (int *)thrust::raw_pointer_cast(&column_width[6]));
+    gpu_atof longitude_tofloat((char *)thrust::raw_pointer_cast(longitude_text.data()), (double *)thrust::raw_pointer_cast(longitude.data()), (int *)thrust::raw_pointer_cast(&column_width[3]));
     thrust::for_each(begin, begin + linecnt, longitude_tofloat);
     
     //Get the month from the timestamp, since that's all we need
     thrust::device_vector<int> month(linecnt);
     get_month get_months((char *)thrust::raw_pointer_cast(tstamp.data()), (int *)thrust::raw_pointer_cast(month.data()));
     thrust::for_each(begin, begin + linecnt, get_months);
-    //thrust::copy(created_tstamp.begin(), created_tstamp.end(), ostream_iterator<char>(cout));
     
     thrust::device_vector<double> bb_min_latitude(NUMBER_OF_BOUNDING_BOXES);
     thrust::device_vector<double> bb_max_latitude(NUMBER_OF_BOUNDING_BOXES);
     thrust::device_vector<double> bb_min_longitude(NUMBER_OF_BOUNDING_BOXES);
     thrust::device_vector<double> bb_max_longitude(NUMBER_OF_BOUNDING_BOXES);
-    thrust::device_vector<int> bb_month(NUMBER_OF_BOUNDING_BOXES);*/
+    thrust::device_vector<int> bb_month(NUMBER_OF_BOUNDING_BOXES);
     
-    //thrust::default_random_engine rng;
-    //thrust::uniform_real_distribution<double> dist;
-    //cout << dist(rng) << "\n";
-    //cout << dist(rng) << "\n";
-    //rng.discard()
+    create_bb bounding_boxes((double *)thrust::raw_pointer_cast(bb_min_latitude.data()), (double *)thrust::raw_pointer_cast(bb_max_latitude.data()), (double *)thrust::raw_pointer_cast(bb_min_longitude.data()), (double *)thrust::raw_pointer_cast(bb_max_longitude.data()), (int *)thrust::raw_pointer_cast(bb_month.data()));
+    thrust::for_each(begin, begin + NUMBER_OF_BOUNDING_BOXES, bounding_boxes);
     
-    //create_bb bounding_boxes((double *)thrust::raw_pointer_cast(bb_min_latitude.data()), (double *)thrust::raw_pointer_cast(bb_max_latitude.data()), (double *)thrust::raw_pointer_cast(bb_min_longitude.data()), (double *)thrust::raw_pointer_cast(bb_max_longitude.data()), (int *)thrust::raw_pointer_cast(bb_month.data()));
-    //thrust::for_each(begin, begin + NUMBER_OF_BOUNDING_BOXES, bounding_boxes);
+    get_events fill_bb((double *)thrust::raw_pointer_cast(latitude.data()), (double *)thrust::raw_pointer_cast(longitude.data()), (int *)thrust::raw_pointer_cast(month.data()), (char *)thrust::raw_pointer_cast(event.data()), (double *)thrust::raw_pointer_cast(bb_min_latitude.data()), (double *)thrust::raw_pointer_cast(bb_max_latitude.data()), (double *)thrust::raw_pointer_cast(bb_min_longitude.data()), (double *)thrust::raw_pointer_cast(bb_max_longitude.data()), (int *)thrust::raw_pointer_cast(bb_month.data()));
+    bb_events init;
+    init.initialize();
+    combine_events add_bb;
+    bb_events events = thrust::transform_reduce(begin, begin + linecnt, fill_bb, init, add_bb);
+    thrust::device_vector<int> events_count(NUMBER_OF_BOUNDING_BOXES);
+    for(int i = 0; i < NUMBER_OF_BOUNDING_BOXES; i++)
+        events_count[i] = events.events[i];
     
-    
-    //thrust::sort(longitude.begin(), longitude.end());
-    //ofstream output("output2.csv");
-    //thrust::copy(longitude.begin(), longitude.end(), ostream_iterator<double>(output, "\n"));
-    //thrust::sort(longitude.begin(), longitude.end());
-    //cout << latitude[0] << '\n';
-    //cout << latitude[linecnt-1] << '\n';
-    //cout << longitude[0] << '\n';
-    //cout << longitude[linecnt - 1] << '\n';
-    
-    //cout.precision(column_width[5]);
-    //thrust::copy(latitude.begin(), latitude.begin() + 100, ostream_iterator<double>(cout, "\n"));
-    
-    /*
-    //We need to convert each vector to the appropriate type
-    //Laneid
-    thrust::device_vector<int> laneid(linecnt);
-    gpu_atoi laneid_toint((char *)thrust::raw_pointer_cast(laneid_text.data()), (int *)thrust::raw_pointer_cast(laneid.data()), (int *)thrust::raw_pointer_cast(column_width.data()));
-    thrust::for_each(begin, begin + linecnt, laneid_toint);
-    
-    //Flow
-    thrust::device_vector<int> flow(linecnt);
-    gpu_atoi flow_toint((char *)thrust::raw_pointer_cast(flow_text.data()), (int *)thrust::raw_pointer_cast(flow.data()), (int *)thrust::raw_pointer_cast(&column_width[3]));
-    thrust::for_each(begin, begin + linecnt, flow_toint);
-    cout << "Lane detector inventory and sensor data parsed: " << ((clock() - start)/(double)CLOCKS_PER_SEC) << '\n';
-    
-    //Now we want to figure out the appropriate zoneid for each entry
-    thrust::device_vector<int> zoneid(linecnt);
-    thrust::device_vector<int> device_detector_linecnt(1);
-    device_detector_linecnt[0] = detector_linecnt;
-    column_search assign_zoneid((int *)thrust::raw_pointer_cast(unique_laneid.data()), (int *)thrust::raw_pointer_cast(unique_zoneid.data()), (int *)thrust::raw_pointer_cast(laneid.data()), (int *)thrust::raw_pointer_cast(zoneid.data()), (int *)thrust::raw_pointer_cast(device_detector_linecnt.data()));
-    thrust::for_each(begin, begin + linecnt, assign_zoneid);
-    
-    //CLEAN
-    //Check bounds on flow values
-    thrust::device_vector<char> flow_valid(linecnt);
-    thrust::fill(flow_valid.begin(), flow_valid.end(), '0');
-    thrust::device_vector<int> flow_bounds(2);
-    flow_bounds[0] = 0;
-    flow_bounds[1] = 100;
-    check_bounds check_flow((int *)thrust::raw_pointer_cast(flow.data()), (char *)thrust::raw_pointer_cast(flow_valid.data()), (int *)thrust::raw_pointer_cast(flow_bounds.data()));
-    thrust::for_each(begin, begin + linecnt, check_flow);
-    
-    //Create index for entries
-    thrust::device_vector<int> index(linecnt);
-    index_filler fill_index((int *)thrust::raw_pointer_cast(index.data()));
-    thrust::for_each(begin, begin+linecnt, fill_index);
-    
-    //Sort zoneid and index
-    thrust::stable_sort_by_key(zoneid.begin(), zoneid.end(), index.begin());
-    
-    //Clean by checking standard deviation
-    thrust::device_vector<int> device_linecnt(1);
-    thrust::device_vector<int> new_flow(linecnt);
-    device_linecnt[0] = linecnt;
-    std_clean cleaner((int *)thrust::raw_pointer_cast(zoneid.data()), (int *)thrust::raw_pointer_cast(index.data()), (int *)thrust::raw_pointer_cast(flow.data()), (int *)thrust::raw_pointer_cast(new_flow.data()), (char *)thrust::raw_pointer_cast(flow_valid.data()), (int *)thrust::raw_pointer_cast(device_linecnt.data()));
-    thrust::for_each(begin, begin+linecnt, cleaner);
-    
-    //Convert values back to char
-    //Laneid
-    thrust::fill(laneid_text.begin(), laneid_text.end(), 0);
-    gpu_itoa laneid_tochar((int *)thrust::raw_pointer_cast(laneid.data()), (char *)thrust::raw_pointer_cast(laneid_text.data()), (int *)thrust::raw_pointer_cast(column_width.data()));
-    thrust::for_each(begin, begin + linecnt, laneid_tochar);
-    
-    //Flow
-    thrust::fill(flow_text.begin(), flow_text.end(), 0);
-    gpu_itoa flow_tochar((int *)thrust::raw_pointer_cast(flow.data()), (char *)thrust::raw_pointer_cast(flow_text.data()), (int *)thrust::raw_pointer_cast(&column_width[3]));
-    thrust::for_each(begin, begin + linecnt, flow_tochar);
-    
-    //New Flow
-    thrust::device_vector<char> new_flow_text(linecnt*column_width[3]);
-    thrust::fill(new_flow_text.begin(), new_flow_text.end(), 0);
-    gpu_itoa new_flow_tochar((int *)thrust::raw_pointer_cast(new_flow.data()), (char *)thrust::raw_pointer_cast(new_flow_text.data()), (int *)thrust::raw_pointer_cast(&column_width[3]));
-    thrust::for_each(begin, begin + linecnt, new_flow_tochar);
-    //thrust::host_vector<char> flow_host(linecnt*column_width[3]);
-    //thrust::copy(flow_text.begin(), flow_text.end(), flow_host.begin());
-    //cout << "Laneid and flow moved to host: " << ((clock() - start)/(double)CLOCKS_PER_SEC) << '\n';
-    
-    //Format output on GPU
-    //Output includes laneid, previous flow, new flow, and validity, separated by commas
+    //Setup for output
+    thrust::device_vector<char> min_latitude_text(NUMBER_OF_BOUNDING_BOXES * LATITUDE_WIDTH);
+    thrust::fill(min_latitude_text.begin(), min_latitude_text.end(), 0);
+    thrust::device_vector<char> max_latitude_text(NUMBER_OF_BOUNDING_BOXES * LATITUDE_WIDTH);
+    thrust::fill(max_latitude_text.begin(), max_latitude_text.end(), 0);
+    thrust::device_vector<char> min_longitude_text(NUMBER_OF_BOUNDING_BOXES * LONGITUDE_WIDTH);
+    thrust::fill(min_longitude_text.begin(), min_longitude_text.end(), 0);
+    thrust::device_vector<char> max_longitude_text(NUMBER_OF_BOUNDING_BOXES * LONGITUDE_WIDTH);
+    thrust::fill(max_longitude_text.begin(), max_longitude_text.end(), 0);
+    thrust::device_vector<char> month_text(NUMBER_OF_BOUNDING_BOXES * 2);
+    thrust::fill(month_text.begin(), month_text.end(), 0);
+    thrust::device_vector<char> events_text(NUMBER_OF_BOUNDING_BOXES * EVENT_COUNT_WIDTH);
+    thrust::fill(events_text.begin(), events_text.end(), 0);
     thrust::device_vector<int> output_num_columns(1);
-    output_num_columns[0] = 4;
-    
+    output_num_columns[0] = NUMBER_OF_OUTPUT_COLUMNS;
     thrust::device_vector<char *> output_columns(output_num_columns[0]);
-    output_columns[0] = thrust::raw_pointer_cast(laneid_text.data());
-    output_columns[1] = thrust::raw_pointer_cast(flow_text.data());
-    output_columns[2] = thrust::raw_pointer_cast(new_flow_text.data());
-    output_columns[3] = thrust::raw_pointer_cast(flow_valid.data());
-    
+    output_columns[0] = thrust::raw_pointer_cast(min_latitude_text.data());
+    output_columns[1] = thrust::raw_pointer_cast(max_latitude_text.data());
+    output_columns[2] = thrust::raw_pointer_cast(min_longitude_text.data());
+    output_columns[3] = thrust::raw_pointer_cast(min_longitude_text.data());
+    output_columns[4] = thrust::raw_pointer_cast(month_text.data());
+    output_columns[5] = thrust::raw_pointer_cast(events_text.data());
     thrust::device_vector<int> output_column_width(output_num_columns[0]);
-    output_column_width[0] = column_width[0];
-    output_column_width[1] = column_width[3];
-    output_column_width[2] = column_width[3];
-    output_column_width[3] = column_width[5];
+    output_column_width[0] = LATITUDE_WIDTH;
+    output_column_width[1] = LATITUDE_WIDTH;
+    output_column_width[2] = LONGITUDE_WIDTH;
+    output_column_width[3] = LONGITUDE_WIDTH;
+    output_column_width[4] = MONTH_WIDTH;
+    output_column_width[5] = EVENT_COUNT_WIDTH;
+    gpu_ftoa min_lat((double *)thrust::raw_pointer_cast(bb_min_latitude.data()), (char *)thrust::raw_pointer_cast(min_latitude_text.data()), (int *)thrust::raw_pointer_cast(&output_column_width[0]));
+    thrust::for_each(begin, begin + NUMBER_OF_BOUNDING_BOXES, min_lat);
+    gpu_ftoa max_lat((double *)thrust::raw_pointer_cast(bb_max_latitude.data()), (char *)thrust::raw_pointer_cast(max_latitude_text.data()), (int *)thrust::raw_pointer_cast(&output_column_width[1]));
+    thrust::for_each(begin, begin + NUMBER_OF_BOUNDING_BOXES, max_lat);
+    gpu_ftoa min_long((double *)thrust::raw_pointer_cast(bb_min_longitude.data()), (char *)thrust::raw_pointer_cast(min_longitude_text.data()), (int *)thrust::raw_pointer_cast(&output_column_width[2]));
+    thrust::for_each(begin, begin + NUMBER_OF_BOUNDING_BOXES, min_long);
+    gpu_ftoa max_long((double *)thrust::raw_pointer_cast(bb_max_longitude.data()), (char *)thrust::raw_pointer_cast(max_longitude_text.data()), (int *)thrust::raw_pointer_cast(&output_column_width[3]));
+    thrust::for_each(begin, begin + NUMBER_OF_BOUNDING_BOXES, max_long);
+    gpu_itoa month_totext((int *)thrust::raw_pointer_cast(bb_month.data()), (char *)thrust::raw_pointer_cast(month_text.data()), (int *)thrust::raw_pointer_cast(&output_column_width[4]));
+    thrust::for_each(begin, begin + NUMBER_OF_BOUNDING_BOXES, month_totext);
+    gpu_itoa events_totext((int *)thrust::raw_pointer_cast(events_count.data()), (char *)thrust::raw_pointer_cast(events_text.data()), (int *)thrust::raw_pointer_cast(&output_column_width[5]));
+    thrust::for_each(begin, begin + NUMBER_OF_BOUNDING_BOXES, events_totext);
+    
+    thrust::copy(events_text.begin(), events_text.end(), ostream_iterator<char>(cout));
     
     thrust::device_vector<int> output_size(1);
-    output_size[0] = output_column_width[0] + output_column_width[1] + output_column_width[2] + output_column_width[3] + output_column_width.size();
-    thrust::device_vector<char> output(linecnt * output_size[0]);
-    thrust::fill(output.begin(), output.end(), ' ');
+    output_size[0] = output_column_width[0] + output_column_width[1] + output_column_width[2] + output_column_width[3] + output_column_width[4] + output_column_width[5] + output_num_columns[0];
+    thrust::device_vector<char> output(NUMBER_OF_BOUNDING_BOXES * output_size[0]);
+    thrust::fill(output.begin(), output.end(), 0);
     gpu_output format_output((char **)thrust::raw_pointer_cast(output_columns.data()), (char *)thrust::raw_pointer_cast(output.data()), (int *)thrust::raw_pointer_cast(output_column_width.data()), (int *)thrust::raw_pointer_cast(output_size.data()), (int *)thrust::raw_pointer_cast(output_num_columns.data()));
-    thrust::for_each(begin, begin + linecnt, format_output);
+    thrust::for_each(begin, begin + NUMBER_OF_BOUNDING_BOXES, format_output);
+    thrust::device_vector<char> final_output(output.size());
+    thrust::copy_if(output.begin(), output.end(), final_output.begin(), null_space());
+    thrust::device_vector<char>::iterator output_end = thrust::find(final_output.begin(), final_output.end(), NULL);
     
     //Output cleaned data
-    assert(SetCurrentDirectory("Cleaned") != 0);
-    HANDLE outputFile = CreateFileA(argv[2], GENERIC_WRITE | GENERIC_READ, FILE_SHARE_WRITE, NULL, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL | FILE_FLAG_SEQUENTIAL_SCAN, NULL);
+    HANDLE outputFile = CreateFileA("training_set.csv", GENERIC_WRITE | GENERIC_READ, FILE_SHARE_WRITE, NULL, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL | FILE_FLAG_SEQUENTIAL_SCAN, NULL);
     assert(outputFile != INVALID_HANDLE_VALUE);
-    
-    HANDLE outputMap = CreateFileMapping(outputFile, NULL, PAGE_READWRITE, 0, output.size(), NULL);
+
+    HANDLE outputMap = CreateFileMapping(outputFile, NULL, PAGE_READWRITE, 0, output_end - final_output.begin(), NULL);
     if(outputMap == NULL)
         cout << GetLastError();        
- 
+
     LPVOID outputMapView = MapViewOfFile(outputMap, FILE_MAP_WRITE, 0, 0, 0);
     
     if (outputMapView == NULL)
         cout << GetLastError();
-    
+
     char *outputMapViewChar = (char *)outputMapView;
-    thrust::copy(output.begin(), output.end(), outputMapViewChar);
-    //ofstream output(argv[1]);
-    //thrust::copy(laneid_text.begin(), laneid_text.end(), ostream_iterator<char>(output));
+    thrust::copy(final_output.begin(), output_end, outputMapViewChar);
+
     cout << "Output written: " << ((clock() - start)/(double)CLOCKS_PER_SEC) << '\n';
-    */
+    
     return 0;
 }

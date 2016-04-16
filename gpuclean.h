@@ -1,3 +1,5 @@
+#define DEVIATIONS 3
+
 struct line_break
 {
  __host__ __device__
@@ -283,7 +285,7 @@ struct std_clean
                 std /= n;
                 std = sqrt(std);*/
                 float deviation = abs(old_flow[index[i]] - median);
-                if (deviation > 3 * *global_std) {
+                if (deviation > DEVIATIONS * *global_std) {
                     flow = (int) mean;
                     valid[index[i]] = '2';
                 }
